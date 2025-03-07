@@ -1,10 +1,10 @@
 package com.employee.exit.EmployeeExitReport.controller;
 
 import com.employee.exit.EmployeeExitReport.Service.EmployeeExitService;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/employee-exit")
@@ -26,8 +26,9 @@ public class EmployeeExitController {
         return "Report generated and email sent!";
     }
 
-//    @GetMapping("/process-exit/{empId}")
-//    public String processEmployeeExit(@PathVariable String empId) {
-//        return employeeExitService.processSingleEmployeeExit(empId);
-//    }
+
+    @PostMapping("/process-exit")
+    public ResponseEntity<Map<String, Object>> processEmployeeExit(@RequestBody Map<String, String> employeeDetails) {
+        return employeeExitService.processSingleEmployeeExit(employeeDetails);
+    }
 }

@@ -3,59 +3,39 @@ package com.employee.exit.EmployeeExitReport.Service;
 import com.employee.exit.EmployeeExitReport.ConfigApiData.ApiConfig;
 import com.employee.exit.EmployeeExitReport.EmailScheduler.EmailSenderService;
 import com.employee.exit.EmployeeExitReport.ExceptionHandler.ApiException;
-import com.employee.exit.EmployeeExitReport.ExceptionHandler.EmailException;
-import com.employee.exit.EmployeeExitReport.RequestHandler.RequestHandler;
+import com.employee.exit.EmployeeExitReport.RequestHandler.RequestResponseHandler;
 import com.employee.exit.EmployeeExitReport.Util.ApiClient;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.bind.annotation.RequestBody;
 
-import javax.mail.*;
-import javax.mail.internet.InternetAddress;
-import javax.mail.internet.MimeBodyPart;
-import javax.mail.internet.MimeMessage;
-import javax.mail.internet.MimeMultipart;
-import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class EmployeeExitService {
 
     private static final Logger logger = LoggerFactory.getLogger(EmployeeExitService.class);
-    private final RequestHandler requestHandler;
+    private final EmailSenderService emailSenderService;
     private final ApiConfig apiConfig;
+    private final ApiClient apiClient;
+    private final RequestResponseHandler requestHandler;
 
-    @Autowired
-    private EmailSenderService emailSenderService;
-    @Autowired
-    ApiClient apiClient;
-
-
-    public EmployeeExitService(EmailSenderService emailSenderService, ApiConfig apiConfig, ApiClient apiClient,RequestHandler requestHandler) {
+    public EmployeeExitService(EmailSenderService emailSenderService, ApiConfig apiConfig, ApiClient apiClient, RequestResponseHandler requestHandler) {
         this.emailSenderService = emailSenderService;
-        this.apiConfig=apiConfig;
+        this.apiConfig = apiConfig;
         this.apiClient = apiClient;
         this.requestHandler = requestHandler;
     }
 
-    @Scheduled(cron = "0 0 18 * * ?") // Runs daily at 6 PM
+    @Scheduled(cron = "0 30 19 * * ?") // Runs daily at 7:30 PM
     public void scheduledEmployeeExitProcess() {
         try {
             logger.info("Starting scheduled employee exit process...");
@@ -68,77 +48,54 @@ public class EmployeeExitService {
     }
 
     public void processEmployeeExits() {
-        // Fetch employee data from Darwin API
         List<Map<String, Object>> employeeData = fetchEmployeeData();
-
-        if (employeeData == null || employeeData.isEmpty()) {
+        if (employeeData.isEmpty()) {
             logger.warn("No employee data found. Skipping process.");
             return;
         }
+        // Fetch status from APIs
+        Map<String, String> groxStreamStatus = fetchStatus(fetchGroxStreamStatus());
+        Map<String, String> ugroVendorStatus = fetchStatus(fetchUgroVendorStatus());
+        Map<String, String> ugroNachStatus = fetchStatus(fetchNachStatus());
 
-        // Fetch status from GroxStream API
-        List<Map<String, Object>> groxStreamStatus = fetchGroxStreamStatus();
-        List<Map<String, Object>> ugroVendorStatus = fetchUgroVendorStatus();
-        List<Map<String, Object>> ugroNachStatus = fetchNachStatus();
 
-        // Map employeeCode -> status for quick lookup
-        Map<String, String> statusMap = new HashMap<>();
-        for (Map<String, Object> entry : groxStreamStatus) {
-            String employeeCode = entry.get("employeeCode").toString();
-            String status = entry.get("status").toString();
-            statusMap.put(employeeCode, status);
-        }
-        Map<String, String> ugroStatusMap = new HashMap<>();
-        for (Map<String, Object> entry : ugroVendorStatus) {
-            ugroStatusMap.put(entry.get("employeeCode").toString(), entry.get("status").toString());
-        }
+        List<Map<String, Object>> reportData = employeeData.stream().map(employee -> Map.of(
+                "ID", employee.getOrDefault("employee_id", "N/A"),
+                "Name", employee.getOrDefault("full_name", "Unknown"),
+                "Email ID", employee.getOrDefault("company_email_id", "Unknown"),
+                "GroXstream Response", getStatusOrDefault(groxStreamStatus, employee.get("employee_id")),
+                "UGro Vendor Response", getStatusOrDefault(ugroVendorStatus, employee.get("employee_id")),
+                "Nach Response", getStatusOrDefault(ugroNachStatus, employee.get("employee_id"))
+        )).collect(Collectors.toList());
 
-        Map<String, String> nachStatusMap = new HashMap<>();
-        for (Map<String, Object> entry : ugroNachStatus) {
-            nachStatusMap.put(entry.get("employeeCode").toString(), entry.get("status").toString());
-        }
-
-        // Prepare final report data
-        List<Map<String, Object>> reportData = new ArrayList<>();
-
-        for (Map<String, Object> employee : employeeData) {
-            String employeeId = employee.get("employee_id") != null ? employee.get("employee_id").toString() : "N/A";
-            String employeeName = employee.get("full_name") != null ? employee.get("full_name").toString() : "Unknown";
-            String employeeEmailID = employee.get("company_email_id") != null ? employee.get("company_email_id").toString() : "Unknown";
-            String employeeCode = employee.get("employee_id") != null ? employee.get("employee_id").toString() : "N/A";
-
-            // Get status from GroxStream response, default to "Pending"
-            String groXstreamStatus = statusMap.getOrDefault(employeeCode, "Pending");
-            String ugroDeactivateVendorStatus = ugroStatusMap.getOrDefault(employeeCode, "Pending");
-            String nachStatus = nachStatusMap.getOrDefault(employeeCode, "Pending");
-
-            Map<String, Object> reportEntry = new HashMap<>();
-            reportEntry.put("ID", employeeId);
-            reportEntry.put("Name", employeeName);
-            reportEntry.put("Email ID", employeeEmailID);
-            reportEntry.put("GroXstream Response", groXstreamStatus);
-            reportEntry.put("UGro Vendor Response", ugroDeactivateVendorStatus);
-            reportEntry.put("Nach Response", nachStatus);
-
-            reportData.add(reportEntry);
-        }
-
-        logger.info("Final Report Data: {}", reportData);
-
-        // Generate Excel report with updated data
-    String filePath = generateExcelReport(reportData);
-
+        String filePath = generateExcelReport(reportData);
         emailSenderService.sendEmailWithAttachment(
-                "rishi.khandelwal@ugrocapital.com",
+                "vaidik.nigam@ugrocapital.com",
                 "Employee Exit Report",
-                "Please find the attached Employee Exit Report.",
-                filePath
-        );
-
-//    String filePath = generateExcelReport(reportData);
-//    sendEmailWithAttachment(filePath);
+                "Please find the attached Employee Exit Report.", filePath);
     }
 
+    private String getStatusOrDefault(Map<String, String> statusMap, Object employeeId) {
+        return statusMap.getOrDefault(employeeId, "Pending");
+    }
+
+    private Map<String, String> fetchStatus(List<Map<String, Object>> responseList) {
+        return responseList.stream()
+                .collect(Collectors.toMap(
+                        entry -> entry.get("employeeCode").toString(),
+                        entry -> mapStatus(entry.get("status").toString()),
+                        (existing, replacement) -> existing  // Handle duplicate keys
+                ));
+    }
+
+    private String mapStatus(String status) {
+        if ("NA".equalsIgnoreCase(status)) {
+            return "Not Available";
+        } else if ("deactivated".equalsIgnoreCase(status)) {
+            return "Employee is deactivated from the server";
+        }
+        return status;
+    }
 
     public List<Map<String, Object>> fetchEmployeeData() {
         String apiUrl = apiConfig.getDarwinUrl();
@@ -336,39 +293,89 @@ public class EmployeeExitService {
         }
     }
 
+    public ResponseEntity<Map<String, Object>> processSingleEmployeeExit(@RequestBody Map<String, String> employeeDetails) {
+        String employeeCode = employeeDetails.get("employeeCode");
+        String employeeEmailId = employeeDetails.get("employeeEmailId");
+
+        // Fetch responses from all three APIs
+        List<Map<String, Object>> groxStreamResponse = fetchGroxStreamStatus();
+        List<Map<String, Object>> ugroVendorResponse = fetchUgroVendorStatus();
+        List<Map<String, Object>> nachResponse = fetchNachStatus();
+
+        // Extract actual status for the employee
+        Map<String, Object> groxStreamResult = extractEmployeeStatus(groxStreamResponse, employeeCode);
+        Map<String, Object> ugroVendorResult = extractEmployeeStatus(ugroVendorResponse, employeeCode);
+        Map<String, Object> nachResult = extractEmployeeStatus(nachResponse, employeeCode);
+
+        // Construct the final response
+        Map<String, Object> response = new HashMap<>();
+        response.put("employeeDetails", List.of(Map.of(
+                "employeeEmailId", employeeEmailId,
+                "employeeCode", employeeCode,
+                "systemResult", Map.of(
+                        "groXStream", groxStreamResult,
+                        "ugroVendor", ugroVendorResult,
+                        "nach", nachResult
+                )
+        )));
+
+        logger.info("Employee Exit Status Response: {}", response);
+        return ResponseEntity.ok(response);
+    }
+
+    private Map<String, Object> extractEmployeeStatus(List<Map<String, Object>> apiResponse, String employeeCode) {
+        return apiResponse.stream()
+                .filter(entry -> employeeCode.equals(entry.get("employeeCode")))
+                .findFirst()
+                .map(entry -> {
+                    String status = entry.get("status") != null ? entry.get("status").toString() : "NA";
+                    return Map.of(
+                            "code", entry.getOrDefault("code", "404"),
+                            "status", mapStatus(status)  // Ensure mapping function translates correctly
+                    );
+                })
+                .orElse(Map.of("code", "404", "status", "NA")); // Default if employeeCode not found
+    }
 
     private String generateExcelReport(List<Map<String, Object>> data) {
         String filePath = "EmployeeExitReport.xlsx";
         try (Workbook workbook = new XSSFWorkbook(); FileOutputStream fileOut = new FileOutputStream(filePath)) {
             Sheet sheet = workbook.createSheet("Employee Exit Report");
-
-            // Creating Header Row
             Row headerRow = sheet.createRow(0);
-            headerRow.createCell(0).setCellValue("ID");
-            headerRow.createCell(1).setCellValue("Name");
-            headerRow.createCell(2).setCellValue("GroXstream Portal");
-            headerRow.createCell(3).setCellValue("Vendor/Partner Portal");
-            headerRow.createCell(4).setCellValue("Nach/Payment Portal ");
-
-            // Populating Data Rows
+            List<String> headers = List.of("ID/Name", "GroXstream Portal", "Vendor/Partner Portal", "Nach/Payment Portal");
+            CellStyle headerStyle = workbook.createCellStyle();
+            Font font = workbook.createFont();
+            font.setBold(true);
+            headerStyle.setFont(font);
+            headerStyle.setBorderTop(BorderStyle.THIN);
+            headerStyle.setBorderBottom(BorderStyle.THIN);
+            headerStyle.setBorderLeft(BorderStyle.THIN);
+            headerStyle.setBorderRight(BorderStyle.THIN);
+            for (int i = 0; i < headers.size(); i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers.get(i));
+                cell.setCellStyle(headerStyle);
+            }
+            CellStyle borderStyle = workbook.createCellStyle();
+            borderStyle.setBorderTop(BorderStyle.THIN);
+            borderStyle.setBorderBottom(BorderStyle.THIN);
+            borderStyle.setBorderLeft(BorderStyle.THIN);
+            borderStyle.setBorderRight(BorderStyle.THIN);
             int rowNum = 1;
             for (Map<String, Object> entry : data) {
                 Row row = sheet.createRow(rowNum++);
-                row.createCell(0).setCellValue(entry.get("ID") != null ? entry.get("ID").toString() : "NULL");
-                row.createCell(1).setCellValue(entry.get("Name") != null ? entry.get("Name").toString() : "NULL");
-                row.createCell(2).setCellValue(entry.get("GroXstream Response") != null ? entry.get("GroXstream Response").toString() : "NULL");
-                row.createCell(3).setCellValue(entry.get("UGro Vendor Response") != null ? entry.get("UGro Vendor Response").toString() : "NULL");
-                row.createCell(4).setCellValue(entry.get("Nach Response") != null ? entry.get("Nach Response").toString() : "NULL");
+                row.createCell(0).setCellValue(entry.get("ID") + " / " + entry.get("Name"));
+                row.createCell(1).setCellValue(entry.get("GroXstream Response").toString());
+                row.createCell(2).setCellValue(entry.get("UGro Vendor Response").toString());
+                row.createCell(3).setCellValue(entry.get("Nach Response").toString());
+                for (int i = 0; i < 4; i++) {
+                    row.getCell(i).setCellStyle(borderStyle);
+                }
             }
-
-            // Write to File
             workbook.write(fileOut);
-            logger.info("Excel report generated successfully at: {}", filePath);
         } catch (IOException e) {
-            logger.error("Failed to generate Excel report: {}", e.getMessage());
             throw new ApiException("Failed to generate Excel report: " + e.getMessage());
         }
         return filePath;
     }
-
 }

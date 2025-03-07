@@ -7,8 +7,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 
 @Component
-public class RequestHandler {
-    private static final Logger logger = LoggerFactory.getLogger(RequestHandler.class);
+public class RequestResponseHandler {
+    private static final Logger logger = LoggerFactory.getLogger(RequestResponseHandler.class);
 
     /**
      * Handles API responses based on HTTP status codes.
