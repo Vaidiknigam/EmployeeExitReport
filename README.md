@@ -115,9 +115,7 @@ Each system needs modifications to integrate with the Master API and enhance ses
 ### Contact & Support
 For any issues or enhancements, please raise an issue in the GitHub repository or contact the IT support team.
 
-📧 **Support Email**: support@ugrocapital.com  
-📖 **Documentation**: [Wiki](https://github.com/YourRepo/EmployeeExitAutomation/wiki)  
-
+📧 **Support Email**: support@ugrocapital.com   
 ---
 
 🚀 **Automating Employee Exit Process - Making IT Secure & Efficient!**
