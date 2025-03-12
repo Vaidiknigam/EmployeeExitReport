@@ -57,6 +57,10 @@ public class EmployeeExitService {
         Map<String, String> groxStreamStatus = fetchStatus(fetchGroxStreamStatus());
         Map<String, String> ugroVendorStatus = fetchStatus(fetchUgroVendorStatus());
         Map<String, String> ugroNachStatus = fetchStatus(fetchNachStatus());
+        Map<String, String> ItGovStatus = fetchStatus(fetchItGovStatus());
+        Map<String, String> DmsStatus = fetchStatus(fetchDmsStatus());
+        Map<String, String> GroProtectStatus = fetchStatus(fetchGroProtectStatus());
+        Map<String, String> ScfStatus = fetchStatus(fetchScfStatus());
 
 
         List<Map<String, Object>> reportData = employeeData.stream().map(employee -> Map.of(
@@ -65,12 +69,17 @@ public class EmployeeExitService {
                 "Email ID", employee.getOrDefault("company_email_id", "Unknown"),
                 "GroXstream Response", getStatusOrDefault(groxStreamStatus, employee.get("employee_id")),
                 "UGro Vendor Response", getStatusOrDefault(ugroVendorStatus, employee.get("employee_id")),
-                "Nach Response", getStatusOrDefault(ugroNachStatus, employee.get("employee_id"))
+                "Nach Response", getStatusOrDefault(ugroNachStatus, employee.get("employee_id")),
+                "IT GOV Response", getStatusOrDefault(ItGovStatus, employee.get("employee_id")),
+                "DMS Response", getStatusOrDefault(DmsStatus, employee.get("employee_id")),
+                "GroProtect Response", getStatusOrDefault(GroProtectStatus, employee.get("employee_id")),
+                "Scf Response", getStatusOrDefault(ScfStatus, employee.get("employee_id"))
+
         )).collect(Collectors.toList());
 
         String filePath = generateExcelReport(reportData);
         emailSenderService.sendEmailWithAttachment(
-                "vaidik.nigam@ugrocapital.com",
+                "rishi.khandelwal@ugrocapital.com",
                 "Employee Exit Report",
                 "Please find the attached Employee Exit Report.", filePath);
     }
@@ -89,12 +98,16 @@ public class EmployeeExitService {
     }
 
     private String mapStatus(String status) {
-        if ("NA".equalsIgnoreCase(status)) {
-            return "Not Available";
-        } else if ("deactivated".equalsIgnoreCase(status)) {
-            return "Employee is deactivated from the server";
+        switch (status) {
+            case "NA":
+                return "Not Available";
+            case "deactivated":
+                return "Employee is deactivated from the server";
+            case "error":
+                return "Status is showing error";
+            default:
+                return "Unknown";
         }
-        return status;
     }
 
     public List<Map<String, Object>> fetchEmployeeData() {
@@ -292,6 +305,229 @@ public class EmployeeExitService {
             throw new ApiException("Failed to fetch Nach status: " + e.getMessage());
         }
     }
+    public List<Map<String, Object>> fetchItGovStatus() {
+        String apiUrl = apiConfig.getItGovUrl();
+
+        List<Map<String, Object>> employeeData = fetchEmployeeData(); // Fetch employee details
+
+        if (employeeData == null || employeeData.isEmpty()) {
+            logger.warn("No employee data found. Skipping IT GOV API call.");
+            return Collections.emptyList();
+        }
+
+        List<Map<String, String>> requestBody = new ArrayList<>();
+        for (Map<String, Object> employee : employeeData) {
+            Map<String, String> requestEntry = new HashMap<>();
+            requestEntry.put("employeeEmailId", employee.get("company_email_id").toString());
+            requestEntry.put("employeeCode", employee.get("employee_id").toString());
+            requestEntry.put("rMEmailId", "");
+            requestBody.add(requestEntry);
+        }
+
+        try {
+            ResponseEntity<Map<String, Object>> responseEntity = apiClient.post(apiUrl, apiConfig.getItGovHeaders(), requestBody);
+            Map<String, Object> response = requestHandler.handleResponse(responseEntity);
+
+            if (response == null || !response.containsKey("employeeDetails")) {
+                throw new ApiException("Invalid API response: Missing 'employeeDetails' key");
+            }
+
+            List<Map<String, Object>> employeeDetails = (List<Map<String, Object>>) response.get("employeeDetails");
+            List<Map<String, Object>> statusList = new ArrayList<>();
+
+            for (Map<String, Object> employee : employeeDetails) {
+                Map<String, Object> systemResult = (Map<String, Object>) employee.get("systemResult");
+                if (systemResult == null || !systemResult.containsKey("IT_GOV")) {
+                    logger.warn("Missing 'IT_GOV' key for employee: {}", employee.get("employeeCode"));
+                    continue;
+                }
+
+                Map<String, Object> itGov = (Map<String, Object>) systemResult.get("IT_GOV");
+
+                Map<String, Object> result = new HashMap<>();
+                result.put("employeeEmailId", employee.get("employeeEmailId"));
+                result.put("employeeCode", employee.get("employeeCode"));
+                result.put("status", itGov.get("status"));
+
+                statusList.add(result);
+            }
+
+            return statusList;
+
+        } catch (Exception e) {
+            logger.error("Error fetching IT GOV status: {}", e.getMessage());
+            throw new ApiException("Failed to fetch IT GOV status: " + e.getMessage());
+        }
+    }
+
+    public List<Map<String, Object>> fetchDmsStatus() {
+            String apiUrl = apiConfig.getDmsUrl();
+
+            List<Map<String, Object>> employeeData = fetchEmployeeData(); // Fetch employee details
+
+            if (employeeData == null || employeeData.isEmpty()) {
+                logger.warn("No employee data found. Skipping DMS API call.");
+                return Collections.emptyList();
+            }
+
+            List<Map<String, Object>> requestBody = new ArrayList<>();
+            for (Map<String, Object> employee : employeeData) {
+                Map<String, Object> requestEntry = new HashMap<>();
+                requestEntry.put("employeeEmailId", employee.get("company_email_id").toString());
+                requestEntry.put("employeeCode", employee.get("employee_id").toString());
+                requestEntry.put("rMEmailId", "");
+                requestBody.add(requestEntry);
+            }
+
+            try {
+                ResponseEntity<Map<String, Object>> responseEntity = apiClient.post(apiUrl, apiConfig.getDmsHeaders(), requestBody);
+                Map<String, Object> response = requestHandler.handleResponse(responseEntity);
+
+                if (response == null || !response.containsKey("employeeDetails")) {
+                    throw new ApiException("Invalid API response: Missing 'employeeDetails' key");
+                }
+
+                List<Map<String, Object>> employeeDetails = (List<Map<String, Object>>) response.get("employeeDetails");
+                List<Map<String, Object>> statusList = new ArrayList<>();
+
+                for (Map<String, Object> employee : employeeDetails) {
+                    Map<String, Object> systemResult = (Map<String, Object>) employee.get("systemResult");
+                    if (systemResult == null || !systemResult.containsKey("UGRO_DMS")) {  // Checking for "DMS" key
+                        logger.warn("Missing 'UGRO_DMS' key for employee: {}", employee.get("employeeCode"));
+                        continue;
+                    }
+
+                    Map<String, Object> dms = (Map<String, Object>) systemResult.get("UGRO_DMS");
+
+                    Map<String, Object> result = new HashMap<>();
+                    result.put("employeeEmailId", employee.get("employeeEmailId"));
+                    result.put("employeeCode", employee.get("employeeCode"));
+                    result.put("status", dms.get("status")); // Extracting status from "DMS"
+
+                    statusList.add(result);
+                }
+
+                return statusList;
+
+            } catch (Exception e) {
+                logger.error("Error fetching DMS status: {}", e.getMessage());
+                throw new ApiException("Failed to fetch DMS status: " + e.getMessage());
+            }
+        }
+
+    public List<Map<String, Object>> fetchGroProtectStatus() {
+        String apiUrl = apiConfig.getGroprotectUrl();
+
+        List<Map<String, Object>> employeeData = fetchEmployeeData(); // Fetch employee details
+
+        if (employeeData == null || employeeData.isEmpty()) {
+            logger.warn("No employee data found. Skipping GRO PROTECT API call.");
+            return Collections.emptyList();
+        }
+
+        List<Map<String, String>> requestBody = new ArrayList<>();
+        for (Map<String, Object> employee : employeeData) {
+            Map<String, String> requestEntry = new HashMap<>();
+            requestEntry.put("employeeEmailId", employee.get("company_email_id").toString());
+            requestEntry.put("employeeCode", employee.get("employee_id").toString());
+            requestEntry.put("rMEmailId", "");
+            requestBody.add(requestEntry);
+        }
+
+        try {
+            ResponseEntity<Map<String, Object>> responseEntity = apiClient.post(apiUrl, apiConfig.getGroprotectHeaders(), requestBody);
+            Map<String, Object> response = requestHandler.handleResponse(responseEntity);
+
+            if (response == null || !response.containsKey("employeeDetails")) {
+                throw new ApiException("Invalid API response: Missing 'employeeDetails' key");
+            }
+
+            List<Map<String, Object>> employeeDetails = (List<Map<String, Object>>) response.get("employeeDetails");
+            List<Map<String, Object>> statusList = new ArrayList<>();
+
+            for (Map<String, Object> employee : employeeDetails) {
+                Map<String, Object> systemResult = (Map<String, Object>) employee.get("systemResult");
+                if (systemResult == null || !systemResult.containsKey("GRO_PROTECT")) {  // Checking for "GRO_PROTECT" key
+                    logger.warn("Missing 'GRO_PROTECT' key for employee: {}", employee.get("employeeCode"));
+                    continue;
+                }
+
+                Map<String, Object> groProtect = (Map<String, Object>) systemResult.get("GRO_PROTECT");
+
+                Map<String, Object> result = new HashMap<>();
+                result.put("employeeEmailId", employee.get("employeeEmailId"));
+                result.put("employeeCode", employee.get("employeeCode"));
+                result.put("status", groProtect.get("status")); // Extracting status from "GRO_PROTECT"
+
+                statusList.add(result);
+            }
+
+            return statusList;
+
+        } catch (Exception e) {
+            logger.error("Error fetching GRO PROTECT status: {}", e.getMessage());
+            throw new ApiException("Failed to fetch GRO PROTECT status: " + e.getMessage());
+        }
+    }
+
+    public List<Map<String, Object>> fetchScfStatus() {
+        String apiUrl = apiConfig.getScfUrl();
+
+        List<Map<String, Object>> employeeData = fetchEmployeeData(); // Fetch employee details
+
+        if (employeeData == null || employeeData.isEmpty()) {
+            logger.warn("No employee data found. Skipping SCF API call.");
+            return Collections.emptyList();
+        }
+
+        Map<String, Object> requestBody = new HashMap<>();
+        List<Map<String, String>> employeeRequests = new ArrayList<>();
+
+        for (Map<String, Object> employee : employeeData) {
+            Map<String, String> requestEntry = new HashMap<>();
+            requestEntry.put("employeeEmailId", employee.get("company_email_id").toString());
+            requestEntry.put("employeeCode", employee.get("employee_id").toString());
+            requestEntry.put("rMEmailId", ""); // Placeholder, modify if needed
+            employeeRequests.add(requestEntry);
+        }
+
+        requestBody.put("employeeRequests", employeeRequests); // Wrapping list inside "employeeRequests" key
+
+        try {
+            ResponseEntity<Map<String, Object>> responseEntity = apiClient.post(apiUrl, apiConfig.getScfHeaders(), requestBody);
+            Map<String, Object> response = requestHandler.handleResponse(responseEntity);
+
+            if (response == null || !response.containsKey("employeeDetails")) {
+                throw new ApiException("Invalid API response: Missing 'employeeDetails' key");
+            }
+
+            List<Map<String, Object>> employeeDetails = (List<Map<String, Object>>) response.get("employeeDetails");
+            List<Map<String, Object>> statusList = new ArrayList<>();
+
+            for (Map<String, Object> employee : employeeDetails) {
+                Map<String, Object> systemResult = (Map<String, Object>) employee.get("systemResult");
+                if (systemResult == null || !systemResult.containsKey("scf")) {  // Checking for "SCF" key
+                    logger.warn("Missing 'scf' key for employee: {}", employee.get("employeeCode"));
+                    continue;
+                }
+
+                Map<String, Object> scf = (Map<String, Object>) systemResult.get("scf");
+
+                Map<String, Object> result = new HashMap<>();
+                result.put("employeeEmailId", employee.get("employeeEmailId"));
+                result.put("employeeCode", employee.get("employeeCode"));
+                result.put("status", scf.get("status")); // Extracting status from "SCF"
+
+                statusList.add(result);
+            }
+
+            return statusList;
+
+        } catch (Exception e) {
+            logger.error("Error fetching SCF status: {}", e.getMessage());
+            throw new ApiException("Failed to fetch SCF status: " + e.getMessage());
+        }
+    }
 
     public ResponseEntity<Map<String, Object>> processSingleEmployeeExit(@RequestBody Map<String, String> employeeDetails) {
         String employeeCode = employeeDetails.get("employeeCode");
@@ -301,11 +537,15 @@ public class EmployeeExitService {
         List<Map<String, Object>> groxStreamResponse = fetchGroxStreamStatus();
         List<Map<String, Object>> ugroVendorResponse = fetchUgroVendorStatus();
         List<Map<String, Object>> nachResponse = fetchNachStatus();
+        List<Map<String, Object>> itGovResponse = fetchItGovStatus();
+        List<Map<String, Object>> dmsResponse = fetchDmsStatus();
 
         // Extract actual status for the employee
         Map<String, Object> groxStreamResult = extractEmployeeStatus(groxStreamResponse, employeeCode);
         Map<String, Object> ugroVendorResult = extractEmployeeStatus(ugroVendorResponse, employeeCode);
         Map<String, Object> nachResult = extractEmployeeStatus(nachResponse, employeeCode);
+        Map<String, Object> itGovResult = extractEmployeeStatus(itGovResponse, employeeCode);
+        Map<String, Object> dmsResult = extractEmployeeStatus(dmsResponse, employeeCode);
 
         // Construct the final response
         Map<String, Object> response = new HashMap<>();
@@ -315,7 +555,9 @@ public class EmployeeExitService {
                 "systemResult", Map.of(
                         "groXStream", groxStreamResult,
                         "ugroVendor", ugroVendorResult,
-                        "nach", nachResult
+                        "nach", nachResult,
+                        "IT_GOV", itGovResult,
+                        "UGRO_DMS", dmsResult
                 )
         )));
 
@@ -342,7 +584,7 @@ public class EmployeeExitService {
         try (Workbook workbook = new XSSFWorkbook(); FileOutputStream fileOut = new FileOutputStream(filePath)) {
             Sheet sheet = workbook.createSheet("Employee Exit Report");
             Row headerRow = sheet.createRow(0);
-            List<String> headers = List.of("ID/Name", "GroXstream Portal", "Vendor/Partner Portal", "Nach/Payment Portal");
+            List<String> headers = List.of("ID/Name", "GroXstream Portal", "Vendor/Partner Portal", "Nach/Payment Portal", "IT GOV Portal", "DMS Portal","GroProtect Portal","SCF Portal");
             CellStyle headerStyle = workbook.createCellStyle();
             Font font = workbook.createFont();
             font.setBold(true);
@@ -368,7 +610,12 @@ public class EmployeeExitService {
                 row.createCell(1).setCellValue(entry.get("GroXstream Response").toString());
                 row.createCell(2).setCellValue(entry.get("UGro Vendor Response").toString());
                 row.createCell(3).setCellValue(entry.get("Nach Response").toString());
-                for (int i = 0; i < 4; i++) {
+                row.createCell(4).setCellValue(entry.get("IT GOV Response").toString());
+                row.createCell(5).setCellValue(entry.get("DMS Response").toString());
+                row.createCell(6).setCellValue(entry.get("GroProtect Response").toString());
+                row.createCell(7).setCellValue(entry.get("Scf Response").toString());
+
+                for (int i = 0; i < 8; i++) {
                     row.getCell(i).setCellStyle(borderStyle);
                 }
             }
