@@ -102,7 +102,7 @@ public class EmployeeExitService {
             case "NA":
                 return "Not Available";
             case "deactivated":
-                return "Employee is deactivated from the server";
+                return "Employee is deactivated";
             case "error":
                 return "Status is showing error";
             default:

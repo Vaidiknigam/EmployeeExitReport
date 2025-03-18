@@ -4,6 +4,7 @@ import com.employee.exit.EmployeeExitReport.Service.EmployeeExitService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -14,16 +15,23 @@ public class EmployeeExitController {
     public EmployeeExitController(EmployeeExitService employeeExitService) {
         this.employeeExitService = employeeExitService;
     }
+
     @GetMapping("/schedule-report")
-    public String scheduleReport() {
+    public ResponseEntity<Map<String, String>> scheduleReport() {
         employeeExitService.scheduledEmployeeExitProcess();
-        return "Report scheduled!";
+
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Report scheduled!");
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/generate-report")
-    public String generateAndSendReport() {
+    public ResponseEntity<Map<String, String>> generateAndSendReport() {
         employeeExitService.processEmployeeExits();
-        return "Report generated and email sent!";
+
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Report generated and email sent!");
+        return ResponseEntity.ok(response);
     }
 
 
