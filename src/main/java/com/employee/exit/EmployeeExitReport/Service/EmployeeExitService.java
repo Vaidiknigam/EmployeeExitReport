@@ -79,7 +79,6 @@ public class EmployeeExitService {
 
         String filePath = generateExcelReport(reportData);
         List<String> recipients = Arrays.asList(
-                "rishi.khandelwal@ugrocapital.com",
                 "vaidik.nigam@ugrocapital.com"
         );
         emailSenderService.sendEmailWithAttachment(
