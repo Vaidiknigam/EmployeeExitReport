@@ -10,6 +10,7 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
+import java.util.List;
 
 @Service
 public class EmailSenderService {
@@ -24,12 +25,12 @@ public class EmailSenderService {
         this.mailSender = mailSender;
     }
 
-    public void sendEmailWithAttachment(String recipient, String subject, String body, String attachmentPath) {
+    public void sendEmailWithAttachment(List<String> recipients, String subject, String body, String attachmentPath) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true);
             helper.setFrom(senderEmail);
-            helper.setTo(recipient);
+            helper.setTo(recipients.toArray(new String[0]));
             helper.setSubject(subject);
             helper.setText(body, true);
 
@@ -39,7 +40,7 @@ public class EmailSenderService {
 
             // Send the email
             mailSender.send(message);
-            System.out.println("Email sent successfully to " + recipient);
+            System.out.println("Email sent successfully to " + recipients);
 
             // Delete the file after sending
             new File(attachmentPath).delete();

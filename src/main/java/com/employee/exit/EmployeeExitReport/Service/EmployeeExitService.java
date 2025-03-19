@@ -78,8 +78,12 @@ public class EmployeeExitService {
         )).collect(Collectors.toList());
 
         String filePath = generateExcelReport(reportData);
-        emailSenderService.sendEmailWithAttachment(
+        List<String> recipients = Arrays.asList(
                 "rishi.khandelwal@ugrocapital.com",
+                "vaidik.nigam@ugrocapital.com"
+        );
+        emailSenderService.sendEmailWithAttachment(
+                recipients,
                 "Employee Exit Report",
                 "Please find the attached Employee Exit Report.", filePath);
     }

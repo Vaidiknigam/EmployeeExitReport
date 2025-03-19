@@ -62,6 +62,35 @@ public class ApiConfig {
     @Value("${api.scf.url}")
     private String scfUrl;
 
+    @Value("${api.groplusdev.headers.Content-Type}")
+    private String contentType;
+
+    @Value("${api.groplusdev.url}")
+    private String getgroplusdevURL;
+
+    @Value("${api.groplusdev.headers.orgId}")
+    private String orgId;
+
+    @Value("${api.groplusdev.headers.requestId}")
+    private String requestId;
+
+    @Value("${api.groplusdev.headers.appId}")
+    private String appId;
+
+    @Value("${api.groplusdev.headers.username}")
+    private String username;
+
+    @Value("${api.groplusdev.headers.clientSecret}")
+    private String clientSecret;
+
+    @Value("${api.groplusdev.headers.serviceName}")
+    private String serviceName;
+
+
+    public String getgroplusdevURL() {
+        return getgroplusdevURL;
+    }
+
     public String getScfUrl() {
         return scfUrl;
     }
@@ -203,6 +232,20 @@ public class ApiConfig {
 
     public String getGroxStreamUrl() {
         return groxStreamUrl;
+    }
+
+
+
+    public Map<String, String> getGroPlusDevHeaders() {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Content-Type", contentType);
+        headers.put("orgId", orgId);
+        headers.put("requestId", requestId);
+        headers.put("appId", appId);
+        headers.put("username", username);
+        headers.put("clientSecret", clientSecret);
+        headers.put("serviceName", serviceName);
+        return headers;
     }
 
     public Map<String, String> getUgroVendorHeaders() {
