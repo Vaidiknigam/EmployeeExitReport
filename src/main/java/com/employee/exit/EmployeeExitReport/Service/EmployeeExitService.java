@@ -542,6 +542,8 @@ public class EmployeeExitService {
         List<Map<String, Object>> nachResponse = fetchNachStatus();
         List<Map<String, Object>> itGovResponse = fetchItGovStatus();
         List<Map<String, Object>> dmsResponse = fetchDmsStatus();
+        List<Map<String, Object>> groProtectResponse = fetchGroProtectStatus();
+        List<Map<String, Object>> scfResponse = fetchScfStatus();
 
         // Extract actual status for the employee
         Map<String, Object> groxStreamResult = extractEmployeeStatus(groxStreamResponse, employeeCode);
@@ -549,6 +551,8 @@ public class EmployeeExitService {
         Map<String, Object> nachResult = extractEmployeeStatus(nachResponse, employeeCode);
         Map<String, Object> itGovResult = extractEmployeeStatus(itGovResponse, employeeCode);
         Map<String, Object> dmsResult = extractEmployeeStatus(dmsResponse, employeeCode);
+        Map<String, Object> groProtectResult = extractEmployeeStatus(groProtectResponse, employeeCode);
+        Map<String, Object> scfResult = extractEmployeeStatus(scfResponse, employeeCode);
 
         // Construct the final response
         Map<String, Object> response = new HashMap<>();
@@ -560,7 +564,9 @@ public class EmployeeExitService {
                         "ugroVendor", ugroVendorResult,
                         "nach", nachResult,
                         "IT_GOV", itGovResult,
-                        "UGRO_DMS", dmsResult
+                        "UGRO_DMS", dmsResult,
+                        "GRO_PROTECT", groProtectResult,
+                        "scf", scfResult
                 )
         )));
 
