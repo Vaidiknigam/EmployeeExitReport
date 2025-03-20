@@ -61,21 +61,26 @@ public class EmployeeExitService {
         Map<String, String> DmsStatus = fetchStatus(fetchDmsStatus());
         Map<String, String> GroProtectStatus = fetchStatus(fetchGroProtectStatus());
         Map<String, String> ScfStatus = fetchStatus(fetchScfStatus());
+        Map<String, String> DeactivateUserStatus = fetchDeactivateUserStatusMap(fetchDeactivateUserStatus());
 
 
-        List<Map<String, Object>> reportData = employeeData.stream().map(employee -> Map.of(
-                "ID", employee.getOrDefault("employee_id", "N/A"),
-                "Name", employee.getOrDefault("full_name", "Unknown"),
-                "Email ID", employee.getOrDefault("company_email_id", "Unknown"),
-                "GroXstream Response", getStatusOrDefault(groxStreamStatus, employee.get("employee_id")),
-                "UGro Vendor Response", getStatusOrDefault(ugroVendorStatus, employee.get("employee_id")),
-                "Nach Response", getStatusOrDefault(ugroNachStatus, employee.get("employee_id")),
-                "IT GOV Response", getStatusOrDefault(ItGovStatus, employee.get("employee_id")),
-                "DMS Response", getStatusOrDefault(DmsStatus, employee.get("employee_id")),
-                "GroProtect Response", getStatusOrDefault(GroProtectStatus, employee.get("employee_id")),
-                "Scf Response", getStatusOrDefault(ScfStatus, employee.get("employee_id"))
+        List<Map<String, Object>> reportData = employeeData.stream().map(employee -> {
+            Map<String, Object> reportEntry = new HashMap<>();
+            reportEntry.put("ID", employee.getOrDefault("employee_id", "N/A"));
+            reportEntry.put("Name", employee.getOrDefault("full_name", "Unknown"));
+            reportEntry.put("Email ID", employee.getOrDefault("company_email_id", "Unknown"));
+            reportEntry.put("GroXstream Response", getStatusOrDefault(groxStreamStatus, employee.get("employee_id")));
+            reportEntry.put("UGro Vendor Response", getStatusOrDefault(ugroVendorStatus, employee.get("employee_id")));
+            reportEntry.put("Nach Response", getStatusOrDefault(ugroNachStatus, employee.get("employee_id")));
+            reportEntry.put("IT GOV Response", getStatusOrDefault(ItGovStatus, employee.get("employee_id")));
+            reportEntry.put("DMS Response", getStatusOrDefault(DmsStatus, employee.get("employee_id")));
+            reportEntry.put("GroProtect Response", getStatusOrDefault(GroProtectStatus, employee.get("employee_id")));
+            reportEntry.put("Scf Response", getStatusOrDefault(ScfStatus, employee.get("employee_id")));
+            reportEntry.put("GrowPlusDev Response", getStatusOrDefault(DeactivateUserStatus, employee.get("employee_id")));
 
-        )).collect(Collectors.toList());
+            return reportEntry;
+        }).collect(Collectors.toList());
+
 
         String filePath = generateExcelReport(reportData);
         List<String> recipients = Arrays.asList(
@@ -112,6 +117,31 @@ public class EmployeeExitService {
                 return "Unknown";
         }
     }
+
+    public Map<String, String> fetchDeactivateUserStatusMap(List<Map<String, Object>> responseList) {
+        return responseList.stream()
+                .collect(Collectors.toMap(
+                        entry -> entry.getOrDefault("employeeCode", "Unknown").toString(), // ✅ Handle null key
+                        entry ->mapDeactivateStatus(entry.getOrDefault("Response Message", "Unknown").toString()), // ✅ Use "Response Message" as key
+                        (existing, replacement) -> existing // Handle duplicate keys
+                ));
+    }
+
+
+
+    private String mapDeactivateStatus(String responseMessage) {
+        switch (responseMessage) {
+            case "User ID is not present":
+                return "User is not present";
+            case "User ID already Deactivated":
+                return "User is already deactivated";
+            case "Deactivation successful":
+                return "User deactivated successfully";
+            default:
+                return "Unknown Response";
+        }
+    }
+
 
     public List<Map<String, Object>> fetchEmployeeData() {
         String apiUrl = apiConfig.getDarwinUrl();
@@ -532,6 +562,74 @@ public class EmployeeExitService {
         }
     }
 
+    public List<Map<String, Object>> fetchDeactivateUserStatus() {
+        String apiUrl = apiConfig.getgroplusdevURL();
+        List<Map<String, Object>> employeeData = fetchEmployeeData();
+
+        if (employeeData.isEmpty()) {
+            logger.warn("No employee data found. Skipping deactivation API call.");
+            return Collections.emptyList();
+        }
+
+        List<Map<String, Object>> statusList = new ArrayList<>();
+
+        for (Map<String, Object> employee : employeeData) {
+            Map<String, Object> requestBody = new HashMap<>();
+            Map<String, Object> services = new HashMap<>();
+            List<Map<String, Object>> serviceList = new ArrayList<>();
+
+            Map<String, Object> serviceEntry = new HashMap<>();
+            serviceEntry.put("X_USER_ID", employee.get("employee_id"));
+            serviceEntry.put("X_LOGIN_ID", "ROHIT");  // Fixed incorrect key reference
+
+            serviceList.add(serviceEntry);
+            services.put("SPDEACTIVATEUSER", serviceList);
+            requestBody.put("interfaces", new HashMap<>()); // Empty object as per API request format
+            requestBody.put("services", services);
+
+            try {
+                ResponseEntity<Map<String, Object>> responseEntity = apiClient.post(apiUrl, apiConfig.getGroPlusDevHeaders(), requestBody);
+                Map<String, Object> response = requestHandler.handleResponse(responseEntity);
+
+                // Extracting the response message safely
+                if (response != null && response.containsKey("services")) {
+                    Map<String, Object> servicesData = (Map<String, Object>) response.get("services");
+                    if (servicesData.containsKey("SPDEACTIVATEUSER")) {
+                        Map<String, Object> deactivateUserResponse = (Map<String, Object>) servicesData.get("SPDEACTIVATEUSER");
+                        List<Map<String, Object>> records = (List<Map<String, Object>>) deactivateUserResponse.get("records");
+
+                        if (records != null && !records.isEmpty()) {
+                            List<Map<String, Object>> data = (List<Map<String, Object>>) records.get(0).get("data");
+
+                            if (data != null && !data.isEmpty()) {
+                                String responseMessage = data.get(0).getOrDefault("RESPONSE_MESSAGE", "No response message").toString();
+
+                                // Creating a response map
+                                Map<String, Object> result = new HashMap<>();
+                                result.put("employeeCode", employee.get("employee_id"));
+                                result.put("Response Message", responseMessage);
+
+                                statusList.add(result);
+                            } else {
+                                logger.warn("No 'data' found for employee: {}", employee.get("employee_id"));
+                            }
+                        } else {
+                            logger.warn("No 'records' found for employee: {}", employee.get("employee_id"));
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                logger.error("Error fetching Deactivate User status for employee {}: {}", employee.get("employee_id"), e.getMessage());
+                throw new ApiException("Failed to fetch Deactivate User status for employee " + employee.get("employee_id") + ": " + e.getMessage());
+            }
+        }
+
+        return statusList;
+    }
+
+
+
+
     public ResponseEntity<Map<String, Object>> processSingleEmployeeExit(@RequestBody Map<String, String> employeeDetails) {
         String employeeCode = employeeDetails.get("employeeCode");
         String employeeEmailId = employeeDetails.get("employeeEmailId");
@@ -592,8 +690,14 @@ public class EmployeeExitService {
         String filePath = "EmployeeExitReport.xlsx";
         try (Workbook workbook = new XSSFWorkbook(); FileOutputStream fileOut = new FileOutputStream(filePath)) {
             Sheet sheet = workbook.createSheet("Employee Exit Report");
+
+            // Define headers
+            List<String> headers = List.of("ID", "Name", "GroXstream Portal", "Vendor/Partner Portal",
+                    "Nach/Payment Portal", "IT GOV Portal", "DMS Portal", "GroProtect Portal",
+                    "SCF Portal", "GroPlusDev Portal");
+
+            // Create header row with styles
             Row headerRow = sheet.createRow(0);
-            List<String> headers = List.of("ID/Name", "GroXstream Portal", "Vendor/Partner Portal", "Nach/Payment Portal", "IT GOV Portal", "DMS Portal","GroProtect Portal","SCF Portal");
             CellStyle headerStyle = workbook.createCellStyle();
             Font font = workbook.createFont();
             font.setBold(true);
@@ -602,32 +706,46 @@ public class EmployeeExitService {
             headerStyle.setBorderBottom(BorderStyle.THIN);
             headerStyle.setBorderLeft(BorderStyle.THIN);
             headerStyle.setBorderRight(BorderStyle.THIN);
+
             for (int i = 0; i < headers.size(); i++) {
                 Cell cell = headerRow.createCell(i);
                 cell.setCellValue(headers.get(i));
                 cell.setCellStyle(headerStyle);
             }
+
+            // Create normal cell style with borders
             CellStyle borderStyle = workbook.createCellStyle();
             borderStyle.setBorderTop(BorderStyle.THIN);
             borderStyle.setBorderBottom(BorderStyle.THIN);
             borderStyle.setBorderLeft(BorderStyle.THIN);
             borderStyle.setBorderRight(BorderStyle.THIN);
+
+            // Fill data rows
             int rowNum = 1;
             for (Map<String, Object> entry : data) {
                 Row row = sheet.createRow(rowNum++);
-                row.createCell(0).setCellValue(entry.get("ID") + " / " + entry.get("Name"));
-                row.createCell(1).setCellValue(entry.get("GroXstream Response").toString());
-                row.createCell(2).setCellValue(entry.get("UGro Vendor Response").toString());
-                row.createCell(3).setCellValue(entry.get("Nach Response").toString());
-                row.createCell(4).setCellValue(entry.get("IT GOV Response").toString());
-                row.createCell(5).setCellValue(entry.get("DMS Response").toString());
-                row.createCell(6).setCellValue(entry.get("GroProtect Response").toString());
-                row.createCell(7).setCellValue(entry.get("Scf Response").toString());
 
-                for (int i = 0; i < 8; i++) {
+                row.createCell(0).setCellValue(entry.getOrDefault("ID", "N/A").toString());
+                row.createCell(1).setCellValue(entry.getOrDefault("Name", "Unknown").toString());
+                row.createCell(2).setCellValue(entry.getOrDefault("GroXstream Response", "").toString());
+                row.createCell(3).setCellValue(entry.getOrDefault("UGro Vendor Response", "").toString());
+                row.createCell(4).setCellValue(entry.getOrDefault("Nach Response", "").toString());
+                row.createCell(5).setCellValue(entry.getOrDefault("IT GOV Response", "").toString());
+                row.createCell(6).setCellValue(entry.getOrDefault("DMS Response", "").toString());
+                row.createCell(7).setCellValue(entry.getOrDefault("GroProtect Response", "").toString());
+                row.createCell(8).setCellValue(entry.getOrDefault("Scf Response", "").toString());
+                row.createCell(9).setCellValue(entry.getOrDefault("GrowPlusDev Response", "").toString());
+
+                // Apply border style to all cells in the row
+                for (int i = 0; i < headers.size(); i++) {
                     row.getCell(i).setCellStyle(borderStyle);
                 }
             }
+            // Auto-size columns to fit text properly
+            for (int i = 0; i < headers.size(); i++) {
+                sheet.autoSizeColumn(i);
+            }
+
             workbook.write(fileOut);
         } catch (IOException e) {
             throw new ApiException("Failed to generate Excel report: " + e.getMessage());
