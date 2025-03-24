@@ -9,7 +9,8 @@ import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.ResponseEntity;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.*;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -61,7 +62,8 @@ public class EmployeeExitService {
         Map<String, String> DmsStatus = fetchStatus(fetchDmsStatus());
         Map<String, String> GroProtectStatus = fetchStatus(fetchGroProtectStatus());
         Map<String, String> ScfStatus = fetchStatus(fetchScfStatus());
-        Map<String, String> DeactivateUserStatus = fetchDeactivateUserStatusMap(fetchDeactivateUserStatus());
+        Map<String, String> DeactivateUserStatus = fetchDeactivateUserStatusMap(fetchGrowPlusDevStatus());
+        Map<String, String> JayamStatus = fetchStatus(fetchJayamStatus());
 
 
         List<Map<String, Object>> reportData = employeeData.stream().map(employee -> {
@@ -77,6 +79,7 @@ public class EmployeeExitService {
             reportEntry.put("GroProtect Response", getStatusOrDefault(GroProtectStatus, employee.get("employee_id")));
             reportEntry.put("Scf Response", getStatusOrDefault(ScfStatus, employee.get("employee_id")));
             reportEntry.put("GrowPlusDev Response", getStatusOrDefault(DeactivateUserStatus, employee.get("employee_id")));
+            reportEntry.put("Jayam Response", getStatusOrDefault(JayamStatus, employee.get("employee_id")));
 
             return reportEntry;
         }).collect(Collectors.toList());
@@ -562,7 +565,7 @@ public class EmployeeExitService {
         }
     }
 
-    public List<Map<String, Object>> fetchDeactivateUserStatus() {
+    public List<Map<String, Object>> fetchGrowPlusDevStatus() {
         String apiUrl = apiConfig.getgroplusdevURL();
         List<Map<String, Object>> employeeData = fetchEmployeeData();
 
@@ -580,18 +583,18 @@ public class EmployeeExitService {
 
             Map<String, Object> serviceEntry = new HashMap<>();
             serviceEntry.put("X_USER_ID", employee.get("employee_id"));
-            serviceEntry.put("X_LOGIN_ID", "ROHIT");  // Fixed incorrect key reference
+            serviceEntry.put("X_LOGIN_ID", "ROHIT");
 
             serviceList.add(serviceEntry);
             services.put("SPDEACTIVATEUSER", serviceList);
-            requestBody.put("interfaces", new HashMap<>()); // Empty object as per API request format
+            requestBody.put("interfaces", new HashMap<>());
             requestBody.put("services", services);
 
             try {
                 ResponseEntity<Map<String, Object>> responseEntity = apiClient.post(apiUrl, apiConfig.getGroPlusDevHeaders(), requestBody);
                 Map<String, Object> response = requestHandler.handleResponse(responseEntity);
 
-                // Extracting the response message safely
+               
                 if (response != null && response.containsKey("services")) {
                     Map<String, Object> servicesData = (Map<String, Object>) response.get("services");
                     if (servicesData.containsKey("SPDEACTIVATEUSER")) {
@@ -604,7 +607,6 @@ public class EmployeeExitService {
                             if (data != null && !data.isEmpty()) {
                                 String responseMessage = data.get(0).getOrDefault("RESPONSE_MESSAGE", "No response message").toString();
 
-                                // Creating a response map
                                 Map<String, Object> result = new HashMap<>();
                                 result.put("employeeCode", employee.get("employee_id"));
                                 result.put("Response Message", responseMessage);
@@ -627,6 +629,55 @@ public class EmployeeExitService {
         return statusList;
     }
 
+    public List<Map<String, Object>> fetchJayamStatus() {
+        String apiUrl = apiConfig.getJayamUrl();
+
+
+        List<Map<String, Object>> employeeData = fetchEmployeeData();
+        if (employeeData == null || employeeData.isEmpty()) {
+            logger.warn("No employee data found. Skipping Jayam API call.");
+            return Collections.emptyList();
+        }
+
+
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("employee", employeeData.stream().map(employee -> Map.of(
+                "employeeEmailId", employee.get("company_email_id").toString(),
+                "employeeCode", employee.get("employee_id").toString(),
+                "rMEmailId", "sk.rafi@jayamsolutions.com"
+        )).collect(Collectors.toList()));
+
+        try {
+            ResponseEntity<List<Map<String, Object>>> responseEntity = apiClient.post(
+                    apiUrl, apiConfig.getJayamHeaders(), requestBody,
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {} // Expecting a **List**
+            );
+
+
+            List<Map<String, Object>> responseList = responseEntity.getBody();
+            if (responseList == null || responseList.isEmpty()) {
+                throw new ApiException("Invalid API response: Empty or null response");
+            }
+            List<Map<String, Object>> statusList = new ArrayList<>();
+            for (Map<String, Object> employee : responseList) {
+                Map<String, Object> systemResult = (Map<String, Object>) employee.get("system_result");
+                Map<String, Object> jayam = (Map<String, Object>) systemResult.get("jayam");
+
+                Map<String, Object> result = new HashMap<>();
+                result.put("employeeEmailId", employee.get("EmployeeEmailId"));
+                result.put("employeeCode", employee.get("EmployeeCode"));
+                result.put("status", jayam.get("jayam_status"));
+
+                statusList.add(result);
+            }
+
+            return statusList;
+
+        } catch (Exception e) {
+            logger.error("Error fetching Jayam status: {}", e.getMessage());
+            throw new ApiException("Failed to fetch Jayam status: " + e.getMessage());
+        }
+    }
 
 
 
@@ -642,6 +693,7 @@ public class EmployeeExitService {
         List<Map<String, Object>> dmsResponse = fetchDmsStatus();
         List<Map<String, Object>> groProtectResponse = fetchGroProtectStatus();
         List<Map<String, Object>> scfResponse = fetchScfStatus();
+        List<Map<String, Object>> groPlusDevResponse = fetchGrowPlusDevStatus();
 
         // Extract actual status for the employee
         Map<String, Object> groxStreamResult = extractEmployeeStatus(groxStreamResponse, employeeCode);
@@ -651,6 +703,7 @@ public class EmployeeExitService {
         Map<String, Object> dmsResult = extractEmployeeStatus(dmsResponse, employeeCode);
         Map<String, Object> groProtectResult = extractEmployeeStatus(groProtectResponse, employeeCode);
         Map<String, Object> scfResult = extractEmployeeStatus(scfResponse, employeeCode);
+        Map<String, Object> growPlusDevResult = extractEmployeeStatus(groPlusDevResponse, employeeCode);
 
         // Construct the final response
         Map<String, Object> response = new HashMap<>();
@@ -664,7 +717,8 @@ public class EmployeeExitService {
                         "IT_GOV", itGovResult,
                         "UGRO_DMS", dmsResult,
                         "GRO_PROTECT", groProtectResult,
-                        "scf", scfResult
+                        "scf", scfResult,
+                        "SPDEACTIVATEUSER", growPlusDevResult
                 )
         )));
 
@@ -694,7 +748,7 @@ public class EmployeeExitService {
             // Define headers
             List<String> headers = List.of("ID", "Name", "GroXstream Portal", "Vendor/Partner Portal",
                     "Nach/Payment Portal", "IT GOV Portal", "DMS Portal", "GroProtect Portal",
-                    "SCF Portal", "GroPlusDev Portal");
+                    "SCF Portal", "GroPlusDev Portal","Jayam Portal");
 
             // Create header row with styles
             Row headerRow = sheet.createRow(0);
@@ -735,6 +789,7 @@ public class EmployeeExitService {
                 row.createCell(7).setCellValue(entry.getOrDefault("GroProtect Response", "").toString());
                 row.createCell(8).setCellValue(entry.getOrDefault("Scf Response", "").toString());
                 row.createCell(9).setCellValue(entry.getOrDefault("GrowPlusDev Response", "").toString());
+                row.createCell(10).setCellValue(entry.getOrDefault("Jayam Response", "").toString());
 
                 // Apply border style to all cells in the row
                 for (int i = 0; i < headers.size(); i++) {

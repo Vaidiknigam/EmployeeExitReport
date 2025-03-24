@@ -4,6 +4,7 @@ package com.employee.exit.EmployeeExitReport.ConfigApiData;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -86,6 +87,18 @@ public class ApiConfig {
     @Value("${api.groplusdev.headers.serviceName}")
     private String serviceName;
 
+    @Value("${api.groprotect.apiKey}")
+    private String groprotectApiKey;
+
+    @Value("${api.jayam.url}")
+    private String jayamUrl;
+
+    @Value("${api.jayam.apiKey}")
+    private String jayamApiKey;
+
+    public String getJayamUrl() {
+        return jayamUrl;
+    }
 
     public String getgroplusdevURL() {
         return getgroplusdevURL;
@@ -98,9 +111,6 @@ public class ApiConfig {
     public void setScfUrl(String scfUrl) {
         this.scfUrl = scfUrl;
     }
-
-    @Value("${api.groprotect.apiKey}")
-    private String groprotectApiKey;
 
     public String getGroprotectUrl() {
         return groprotectUrl;
@@ -305,6 +315,13 @@ public class ApiConfig {
     public Map<String, String> getScfHeaders() {
         Map<String, String> headers = new HashMap<>();
         headers.put("Content-Type", "application/json");
+        return headers;
+    }
+
+    public Map<String, String> getJayamHeaders() {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Content-Type", "application/json");
+        headers.put("Authorization", jayamApiKey);
         return headers;
     }
 }

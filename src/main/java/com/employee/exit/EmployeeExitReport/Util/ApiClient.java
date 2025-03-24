@@ -19,6 +19,21 @@ public class ApiClient {
         this.webClient = webClientBuilder.build();
     }
 
+    public <T> ResponseEntity<T> post(String url, Map<String, String> headers, Object requestBody, ParameterizedTypeReference<T> responseType) {
+        try {
+            return webClient.post()
+                    .uri(url)
+                    .headers(httpHeaders -> headers.forEach(httpHeaders::set))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .toEntity(responseType)
+                    .block();
+        } catch (WebClientResponseException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(null);
+        }
+    }
+
     public ResponseEntity<Map<String, Object>> post(String url, Map<String, String> headers, Object requestBody) {
         try {
             return webClient.post()
