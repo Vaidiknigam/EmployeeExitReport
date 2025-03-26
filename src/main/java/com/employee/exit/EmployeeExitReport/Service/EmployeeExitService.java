@@ -111,9 +111,9 @@ public class EmployeeExitService {
     private String mapStatus(String status) {
         switch (status) {
             case "NA":
-                return "Not Available";
+                return "User is not present";
             case "deactivated":
-                return "Employee is deactivated";
+                return "User is deactivated";
             case "error":
                 return "Status is showing error";
             default:
@@ -137,7 +137,7 @@ public class EmployeeExitService {
             case "User ID is not present":
                 return "User is not present";
             case "User ID already Deactivated":
-                return "User is already deactivated";
+                return "User is deactivated";
             case "Deactivation successful":
                 return "User deactivated successfully";
             default:
