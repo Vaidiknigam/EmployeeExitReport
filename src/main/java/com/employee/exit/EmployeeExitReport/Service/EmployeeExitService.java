@@ -124,8 +124,8 @@ public class EmployeeExitService {
     public Map<String, String> fetchGrowPlusDevStatusMap(List<Map<String, Object>> responseList) {
         return responseList.stream()
                 .collect(Collectors.toMap(
-                        entry -> entry.getOrDefault("employeeCode", "Unknown").toString(), //  Handle null key
-                        entry ->mapDeactivateStatus(entry.getOrDefault("Response Message", "Unknown").toString()), //  Use "Response Message" as key
+                        entry -> entry.getOrDefault("employeeCode", "Unknown").toString(),
+                        entry ->mapDeactivateStatus(entry.getOrDefault("Response Message", "Unknown").toString()),
                         (existing, replacement) -> existing // Handle duplicate keys
                 ));
     }
