@@ -62,7 +62,7 @@ public class EmployeeExitService {
         Map<String, String> DmsStatus = fetchStatus(fetchDmsStatus());
         Map<String, String> GroProtectStatus = fetchStatus(fetchGroProtectStatus());
         Map<String, String> ScfStatus = fetchStatus(fetchScfStatus());
-        Map<String, String> DeactivateUserStatus = fetchDeactivateUserStatusMap(fetchGrowPlusDevStatus());
+        Map<String, String> GrowPlusDevStatus = fetchGrowPlusDevStatusMap(fetchGrowPlusDevStatus());
         Map<String, String> JayamStatus = fetchStatus(fetchJayamStatus());
 
 
@@ -78,7 +78,7 @@ public class EmployeeExitService {
             reportEntry.put("DMS Response", getStatusOrDefault(DmsStatus, employee.get("employee_id")));
             reportEntry.put("GroProtect Response", getStatusOrDefault(GroProtectStatus, employee.get("employee_id")));
             reportEntry.put("Scf Response", getStatusOrDefault(ScfStatus, employee.get("employee_id")));
-            reportEntry.put("GrowPlusDev Response", getStatusOrDefault(DeactivateUserStatus, employee.get("employee_id")));
+            reportEntry.put("GrowPlusDev Response", getStatusOrDefault(GrowPlusDevStatus, employee.get("employee_id")));
             reportEntry.put("Jayam Response", getStatusOrDefault(JayamStatus, employee.get("employee_id")));
 
             return reportEntry;
@@ -117,15 +117,15 @@ public class EmployeeExitService {
             case "error":
                 return "Status is showing error";
             default:
-                return "Unknown";
+                return "Unknown Response";
         }
     }
 
-    public Map<String, String> fetchDeactivateUserStatusMap(List<Map<String, Object>> responseList) {
+    public Map<String, String> fetchGrowPlusDevStatusMap(List<Map<String, Object>> responseList) {
         return responseList.stream()
                 .collect(Collectors.toMap(
-                        entry -> entry.getOrDefault("employeeCode", "Unknown").toString(), // ✅ Handle null key
-                        entry ->mapDeactivateStatus(entry.getOrDefault("Response Message", "Unknown").toString()), // ✅ Use "Response Message" as key
+                        entry -> entry.getOrDefault("employeeCode", "Unknown").toString(), //  Handle null key
+                        entry ->mapDeactivateStatus(entry.getOrDefault("Response Message", "Unknown").toString()), //  Use "Response Message" as key
                         (existing, replacement) -> existing // Handle duplicate keys
                 ));
     }
