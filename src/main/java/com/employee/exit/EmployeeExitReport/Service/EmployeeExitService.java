@@ -117,7 +117,7 @@ public class EmployeeExitService {
             case "error":
                 return "Status is showing error";
             default:
-                return "Unknown";
+                return "Unknown Response";
         }
     }
 
